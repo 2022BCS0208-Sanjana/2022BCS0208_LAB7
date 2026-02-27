@@ -33,7 +33,8 @@ pipeline {
                 echo "Waiting for API to be ready..."
                 sleep 5
 
-                for i in {1..15}; do
+                i=1
+                while [ $i -le 15 ]; do
                     if curl -s -X POST $API_URL/predict \
                         -H "Content-Type: application/json" \
                         -d @valid_input.json > /dev/null; then
@@ -41,6 +42,7 @@ pipeline {
                         exit 0
                     fi
                     echo "Retry $i..."
+                    i=$((i+1))
                     sleep 3
                 done
 
@@ -53,13 +55,12 @@ pipeline {
         stage('Valid Inference Test') {
             steps {
                 sh '''
-                echo "Sending valid inference request..."
+                echo "Running valid inference test..."
                 RESPONSE=$(curl -s -X POST $API_URL/predict \
                     -H "Content-Type: application/json" \
                     -d @valid_input.json)
 
                 echo "Response: $RESPONSE"
-
                 echo "$RESPONSE" | grep -q "prediction"
                 '''
             }
@@ -68,7 +69,7 @@ pipeline {
         stage('Invalid Inference Test') {
             steps {
                 sh '''
-                echo "Sending invalid inference request..."
+                echo "Running invalid inference test..."
                 STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
                     -X POST $API_URL/predict \
                     -H "Content-Type: application/json" \
