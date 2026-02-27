@@ -31,13 +31,19 @@ pipeline {
             steps {
                 sh '''
                 echo "Waiting for API to be ready..."
-                for i in {1..10}; do
-                    if curl -s $API_URL/docs > /dev/null; then
+                sleep 5
+
+                for i in {1..15}; do
+                    if curl -s -X POST $API_URL/predict \
+                        -H "Content-Type: application/json" \
+                        -d @valid_input.json > /dev/null; then
                         echo "API is ready"
                         exit 0
                     fi
+                    echo "Retry $i..."
                     sleep 3
                 done
+
                 echo "API did not start in time"
                 exit 1
                 '''
