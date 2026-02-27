@@ -21,16 +21,21 @@ pipeline {
         }
 
         stage('Wait for API') {
-            steps {
-                sh """
-                for i in {1..10}; do
-                  curl -s http://localhost:8000/health && exit 0
-                  sleep 3
-                done
-                exit 1
-                """
-            }
-        }
+    steps {
+        sh '''
+        echo "Waiting for API to be ready..."
+        for i in {1..10}; do
+            if curl -s http://localhost:8000/docs > /dev/null; then
+                echo "API is ready"
+                exit 0
+            fi
+            sleep 3
+        done
+        echo "API did not start in time"
+        exit 1
+        '''
+    }
+}
 
         stage('Valid Inference Test') {
             steps {
