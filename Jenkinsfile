@@ -4,7 +4,7 @@ pipeline {
     environment {
         IMAGE_NAME = "2022bcs0208sanjana/wine_predict_2022bcs0208:latest"
         CONTAINER_NAME = "Lab7_mlops"
-        API_URL = "http://host.docker.internal:8000"
+        API_URL = "http://host.docker.internal:8001"
     }
 
     stages {
@@ -21,8 +21,8 @@ pipeline {
                 echo "Removing old container if exists..."
                 docker rm -f $CONTAINER_NAME || true
 
-                echo "Starting container..."
-                docker run -d --name $CONTAINER_NAME -p 8000:8000 $IMAGE_NAME
+                echo "Starting container on port 8001..."
+                docker run -d --name $CONTAINER_NAME -p 8001:8000 $IMAGE_NAME
                 '''
             }
         }
