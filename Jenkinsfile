@@ -4,7 +4,7 @@ pipeline {
     environment {
         IMAGE_NAME = "2022bcs0208sanjana/wine_predict_2022bcs0208:latest"
         CONTAINER_NAME = "Lab7_mlops"
-        API_URL = "http://host.docker.internal:8000"
+        API_URL = "http://localhost:8000"
     }
 
     stages {
@@ -22,7 +22,7 @@ pipeline {
                 docker rm -f $CONTAINER_NAME || true
 
                 echo "Starting container..."
-                docker run -d --name $CONTAINER_NAME -p 8000:8000 $IMAGE_NAME
+                docker run -d --name $CONTAINER_NAME --network host $IMAGE_NAME
                 '''
             }
         }
@@ -30,7 +30,7 @@ pipeline {
         stage('Wait for API') {
             steps {
                 sh '''
-                echo "Waiting for API to be ready..."
+                echo "Waiting for API..."
                 for i in {1..15}; do
                     if curl -s $API_URL/docs > /dev/null; then
                         echo "API is ready"
@@ -74,10 +74,7 @@ pipeline {
 
     post {
         always {
-            sh '''
-            echo "Cleaning up container..."
-            docker rm -f $CONTAINER_NAME || true
-            '''
+            sh "docker rm -f $CONTAINER_NAME || true"
         }
         success {
             echo "✅ Pipeline completed successfully"
