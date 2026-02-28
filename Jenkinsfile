@@ -2,71 +2,100 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = "2022bcs0208sanjana/wine_predict_2022bcs0208:latest"
-        CONTAINER_NAME = "Lab7_mlops"
-        API_URL = "http://localhost:8000"
+        IMAGE_NAME = "2022bcs0208sanjana/wine_predict_2022bcs0208"
+        CONTAINER_NAME = "wine_test_container"
     }
 
     stages {
 
         stage('Pull Image') {
             steps {
-                sh "docker pull $IMAGE_NAME"
+                sh 'docker pull $IMAGE_NAME'
             }
         }
 
         stage('Run Container') {
             steps {
                 sh '''
-                echo "Removing old container if exists..."
                 docker rm -f $CONTAINER_NAME || true
-
-                echo "Starting container..."
-                docker run -d --name $CONTAINER_NAME --network host $IMAGE_NAME
+                docker run -d -p 8000:8000 \
+                --add-host=host.docker.internal:host-gateway \
+                --name $CONTAINER_NAME $IMAGE_NAME
                 '''
             }
         }
 
-        stage('Wait for API') {
+        stage('Wait for Service Readiness') {
             steps {
-                sh '''
-                echo "Waiting for API..."
-                for i in {1..15}; do
-                    if curl -s $API_URL/docs > /dev/null; then
-                        echo "API is ready"
-                        exit 0
-                    fi
-                    echo "Retry $i..."
-                    sleep 3
-                done
-                echo "API did not start in time"
-                exit 1
-                '''
+                script {
+                    timeout(time: 90, unit: 'SECONDS') {
+                        waitUntil {
+                            def response = sh(
+                                script: "curl -s -o /dev/null -w '%{http_code}' http://host.docker.internal:8000/ || true",
+                                returnStdout: true
+                            ).trim()
+                            return (response == "200")
+                        }
+                    }
+                }
             }
         }
 
         stage('Valid Inference Test') {
             steps {
-                sh '''
-                curl -X POST $API_URL/predict \
-                -H "Content-Type: application/json" \
-                -d @valid_input.json
-                '''
+                script {
+                    def response = sh(
+                        script: """curl -s -X POST http://host.docker.internal:8000/predict \
+                        -H 'Content-Type: application/json' \
+                        -d '{
+                          "fixed_acidity":7.4,
+                          "volatile_acidity":0.7,
+                          "citric_acid":0.0,
+                          "residual_sugar":1.9,
+                          "chlorides":0.076,
+                          "free_sulfur_dioxide":11.0,
+                          "total_sulfur_dioxide":34.0,
+                          "density":0.9978,
+                          "pH":3.51,
+                          "sulphates":0.56,
+                          "alcohol":9.4
+                        }'""",
+                        returnStdout: true
+                    ).trim()
+
+                    echo "Valid Response: ${response}"
+
+                    if (!(response ==~ /.*\d+.*/)) {
+                        error("Prediction is not numeric")
+                    }
+                }
             }
         }
 
         stage('Invalid Inference Test') {
             steps {
-                sh '''
-                STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-                -X POST $API_URL/predict \
-                -H "Content-Type: application/json" \
-                -d @invalid_input.json)
+                script {
+                    def response = sh(
+                        script: """curl -s -o /dev/null -w '%{http_code}' -X POST http://host.docker.internal:8000/predict \
+                        -H 'Content-Type: application/json' \
+                        -d '{"fixed_acidity":7.4}'""",
+                        returnStdout: true
+                    ).trim()
 
-                if [ "$STATUS" -eq 200 ]; then
-                    echo "Invalid input should not return 200"
-                    exit 1
-                fi
+                    echo "Invalid Status Code: ${response}"
+
+                    if (response == "422") {
+                        error("Invalid input did not return expected error")
+                    }
+                }
+            }
+        }
+
+        stage('Stop Container') {
+            steps {
+                sh '''
+                docker stop $CONTAINER_NAME || true
+                docker rm $CONTAINER_NAME || true
                 '''
             }
         }
@@ -74,13 +103,7 @@ pipeline {
 
     post {
         always {
-            sh "docker rm -f $CONTAINER_NAME || true"
-        }
-        success {
-            echo "✅ Pipeline completed successfully"
-        }
-        failure {
-            echo "❌ Pipeline fail"
+            sh 'docker rm -f $CONTAINER_NAME || true'
         }
     }
 }
